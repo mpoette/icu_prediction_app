@@ -1,0 +1,280 @@
+{
+  "features": {
+    "PAM": {
+      "column": "pam",
+      "table": "PtAssessment",
+      "type": "standard",
+      "label": [
+        "hémodynamique"
+      ],
+      "codes": {
+        "INV": [
+          "arterialBPInt.mean",
+          "arterialBPInt.mean.ptAdult"
+        ],
+        "NON_INV": [
+          "nonInvasiveBPInt.mean",
+          "nonInvasiveBPInt.mean.ptAdult",
+          "NBP_V2.Mean"
+        ]
+      },
+      "agg_method": "median",
+      "imputation_method": "interpolate_ffill_bfill",
+      "default_value": 0.0
+    },
+    "PAD": {
+      "column": "pad",
+      "table": "PtAssessment",
+      "type": "standard",
+      "label": [
+        "hémodynamique"
+      ],
+      "codes": {
+        "INV": [
+          "arterialBPInt.diastolic",
+          "arterialBPInt.diastolic.ptAdult"
+        ],
+        "NON_INV": [
+          "nonInvasiveBPInt.diastolic",
+          "nonInvasiveBPInt.diastolic.ptAdult",
+          "NBP_V2.Diastolic"
+        ]
+      },
+      "agg_method": "median",
+      "imputation_method": "interpolate_ffill_bfill",
+      "default_value": 0.0
+    },
+    "HEART_RATE": {
+      "column": "heart_rate",
+      "table": "PtAssessment",
+      "type": "standard",
+      "label": [
+        "hémodynamique"
+      ],
+      "codes": [
+        "heartRateInt.heartRate",
+        "heartRateInt.heartRate.ptAdult",
+        "PulseRateInt.heartRate",
+        "PulseRateInt.heartRate.ptAdult"
+      ],
+      "agg_method": "median",
+      "imputation_method": "interpolate_ffill_bfill",
+      "default_value": 0.0
+    },
+    "SPO2": {
+      "column": "spo2",
+      "table": "PtAssessment",
+      "type": "standard",
+      "label": [
+        "respiratoire"
+      ],
+      "codes": [
+        "SpO2Int.SpO2msmt",
+        "SpO2Int.SpO2msmt.ptAdult",
+        "SPO2_V2.Value"
+      ],
+      "agg_method": "median",
+      "imputation_method": "interpolate_ffill_bfill",
+      "default_value": 0.0
+    },
+    "TEMPERATURE": {
+      "column": "temp",
+      "table": "PtAssessment",
+      "type": "standard",
+      "codes": [
+        "temperatureInt.temperature",
+        "temperatureInt.temperature.ptAdult"
+      ],
+      "agg_method": "median",
+      "imputation_method": "interpolate_ffill_bfill",
+      "default_value": 0.0
+    },
+    "FIO2": {
+      "column": "fio2_corr",
+      "table": "PtAssessment",
+      "type": "standard",
+      "label": [
+        "respiratoire"
+      ],
+      "codes": [
+        "FiO2Int.FiO2msmt",
+        "FiO2Int.FiO2msmt.ptAdult",
+        "Reglage_FiO2.FiO2Msmt"
+      ],
+      "agg_method": "median",
+      "imputation_method": "interpolate_limit",
+      "default_value": 21.0
+    },
+    "GLYC_CAP": {
+      "column": "glyc_cap",
+      "table": "ptLabResult",
+      "type": "standard",
+      "label": [
+        "général",
+        "infectieux"
+      ],
+      "codes": [
+        "HGT.Glycmie_capillaire"
+      ],
+      "agg_method": "median",
+      "imputation_method": "ffill",
+      "default_value": 1.1
+    },
+    "NAD_DOSE": {
+      "column": "nad_dose_poids",
+      "table": "patientMedication",
+      "type": "standard",
+      "label": [
+        "hémodynamique"
+      ],
+      "codes": [
+        "Adm IVSE: .noradrenaline bitartrate.Dose/Poids",
+        "Adm IVSE: NOREPINEPHRINE.Dose/Poids"
+      ],
+      "agg_method": "sum",
+      "imputation_method": "fillna_zero",
+      "default_value": 0.0
+    },
+    "VENTILATION": {
+      "column": "is_ventilated",
+      "table": "PatientAssessment",
+      "type": "regex_match",
+      "label": [
+        "respiratoire"
+      ],
+      "search_props": [
+        "VentMode",
+        "Mode_ventilatoire",
+        "Respiratory_Support",
+        "O2_Delivery",
+        "O2DeliveryInt"
+      ],
+      "exclusion_pattern": "Lunettes|Masque|Air Ambiant|Room Air|Fio2_seule|Sonde urinaire|OHD|Optiflow|Lunettes_Nasales|Face_mask|Moyenne_Concentration",
+      "agg_method": "max",
+      "imputation_method": "ffill_zero",
+      "default_value": 0
+    },
+    "NEURAL_STATUS": {
+      "columns": [
+        "is_conscious",
+        "is_sedated",
+        "is_not_alert"
+      ],
+      "table": "PatientAssessment",
+      "type": "categorical_mapping",
+      "label": [
+        "neurologique"
+      ],
+      "codes": [
+        "LOCInt.LOCList.Conscient",
+        "LOCInt.LOCList.cooperative",
+        "LOCInt.LOCList.Coma_neuro_sdat",
+        "LOCInt.LOCList.Curaris",
+        "LOCInt.LOCList.Somnolent",
+        "LOCInt.LOCList.Auditif"
+      ],
+      "mapping": {
+        "LOCInt.LOCList.Conscient": "is_conscious",
+        "LOCInt.LOCList.cooperative": "is_conscious",
+        "LOCInt.LOCList.Coma_neuro_sdat": "is_sedated",
+        "LOCInt.LOCList.Curaris": "is_sedated",
+        "LOCInt.LOCList.Somnolent": "is_not_alert",
+        "LOCInt.LOCList.Auditif": "is_not_alert"
+      },
+      "agg_method": "max",
+      "imputation_method": "ffill_zero",
+      "default_value": 0
+    },
+    "AGE": {
+      "column": "age",
+      "table": "PtBedStay",
+      "type": "column_value",
+      "label": [
+        "général"
+      ],
+      "agg_method": "first",
+      "imputation_method": "ffill_bfill",
+      "default_value": 60.0
+    },
+    "CREAT": {
+      "column": "creat",
+      "table": "ptLabResult",
+      "type": "standard",
+      "label": [
+        "milieu_intérieur"
+      ],
+      "codes": [
+        "CreatinineInt.Cratinine_micromollPty"
+      ],
+      "agg_method": "median",
+      "imputation_method": "interpolate_ffill_bfill",
+      "default_value": 80.0
+    },
+    "NUM_PLQ": {
+      "column": "num_plq",
+      "table": "ptLabResult",
+      "type": "standard",
+      "label": [
+        "hémostase"
+      ],
+      "codes": [
+        "PlateletsInt.Plaquettes_Gl"
+      ],
+      "agg_method": "median",
+      "imputation_method": "interpolate_ffill_bfill",
+      "default_value": 250.0
+    },
+    "BILI_TOT": {
+      "column": "bili_tot",
+      "table": "ptLabResult",
+      "type": "standard",
+      "label": [
+        "hépatique"
+      ],
+      "codes": [
+        "totalBilirubinMstInt.Bilirubine_totale"
+      ],
+      "agg_method": "median",
+      "imputation_method": "interpolate_ffill_bfill",
+      "default_value": 10.0
+    },
+    "TP": {
+      "column": "tp",
+      "table": "ptLabResult",
+      "type": "standard",
+      "label": [
+        "hémostase",
+        "hépatique"
+      ],
+      "codes": [
+        "Taux_de_prothrombine_.Taux_de_prothrombine"
+      ],
+      "agg_method": "median",
+      "imputation_method": "interpolate_ffill_bfill",
+      "default_value": 100.0
+    },
+    "DIALYSE": {
+      "columns": [
+        "abs_dialyse",
+        "dialyse_hdi",
+        "dialyse_cvvhf"
+      ],
+      "table": "PtAssessment",
+      "type": "dialyse",
+      "label": [
+        "milieu_intérieur"
+      ],
+      "codes": {
+        "hdi": [
+          "Dbit_sang_mLh_HDi.Db_sg_HDi"
+        ],
+        "cvvhf": [
+          "Dbit_sang_HDc.Db_Sg"
+        ]
+      },
+      "agg_method": "max",
+      "imputation_method": "ffill_zero",
+      "default_value": 0
+    }
+  }
+}
