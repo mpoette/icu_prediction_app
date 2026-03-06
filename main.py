@@ -1,3 +1,20 @@
+# /// script
+# dependencies = [
+#   "pandas>=2.0.0",
+#   "numpy>=1.24.0",
+#   "pyarrow>=12.0.0",       
+#   "scikit-learn>=1.2.0",   
+#   "joblib>=1.2.0",         
+#   "torch>=2.0.0",          
+#   "matplotlib>=3.7.0",    
+#   "SQLAlchemy>=2.0.0",     
+#   "pyodbc>=4.0.39",     
+#   "pymssql==2.3.12",   
+#   "streamlit>=1.20.0",
+#   "tqdm",
+# ]
+# ///
+
 import argparse
 import pandas as pd
 from datetime import datetime, timedelta, timezone

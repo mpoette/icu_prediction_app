@@ -98,6 +98,10 @@ L'interface graphique permet la présentation des résultats et l'exploration vi
 ```bash
 streamlit run app_rea.py
 ```
+ou
+```bash
+uv run --with-requirements requirements.txt python -m streamlit run app_rea.py
+```
 **Fonctionnalités :**
 
 * **Tableau de bord matriciel :** Affiche la cartographie des lits avec un code couleur indicatif de la sévérité (Vert: Stable <50%, Orange: Vigilance, Rouge: Critique >75%).
