@@ -31,7 +31,7 @@ def extract_standard(engine, encounter_id: int, config: dict) -> pd.DataFrame:
         query = f"""
         SELECT pr.utcChartTime, pr.valueNumber 
         FROM {table} pr
-        JOIN M_dictionary md ON pr.attributeId = md.attributeId AND pa.interventionId = md.interventionId
+        JOIN M_dictionary md ON pr.attributeId = md.attributeId AND pr.interventionId = md.interventionId
         WHERE pr.encounterId = {encounter_id} 
           AND md.dictionaryPropName IN ({codes_sql})
           AND pr.valueNumber IS NOT NULL
@@ -40,7 +40,7 @@ def extract_standard(engine, encounter_id: int, config: dict) -> pd.DataFrame:
         query = f"""
         SELECT pm.utcChartTime, pm.valueNumber 
         FROM DAR.{table} pm
-        JOIN M_dictionary md ON pm.attributeId = md.attributeId AND pa.interventionId = md.interventionId
+        JOIN M_dictionary md ON pm.attributeId = md.attributeId AND pm.interventionId = md.interventionId
         WHERE pm.encounterId = {encounter_id} 
           AND md.dictionaryLabel IN ({codes_sql})
           AND pm.valueNumber IS NOT NULL
