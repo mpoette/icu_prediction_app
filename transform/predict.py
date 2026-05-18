@@ -1,4 +1,5 @@
 import joblib
+import functools
 import numpy as np
 import config as cfg
 import torch
@@ -8,6 +9,7 @@ from config import MODEL_WEIGHTS_PATH, MODEL_PKL_PATH, MODELS_DIR
 from models.lstmTimeModified import load_model_from_checkpoint, predict_proba
 
 
+@functools.lru_cache(maxsize=1)
 def _load_system_models():
     """
     Charge tous les modèles par label depuis MODELS_LABELS_DIR.

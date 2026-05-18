@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import threading
 from pathlib import Path
+from datetime import timedelta
 import config as cfg
 
 
@@ -15,36 +16,39 @@ COLUMNS = [
     'sys_milieu_intérieur', 'sys_hémostase', 'sys_hépatique'
 ]
 
+_RETENTION_DAYS = 30
+
+
 def save_results(bed_label, encounter_id, score, timestamp, sub_scores=None):
-    """Ajoute une ligne au registre global avec une structure strictement fixe."""
+    """Écrit dans le registre global avec déduplication et rotation des 30 derniers jours."""
     filepath = cfg.OUTPUT_DIR / "historique_scores_rea.csv"
-    
 
     row_data = {col: None for col in COLUMNS}
-    
-    # Remplissage des données de base
     row_data.update({
         'date_calcul':    timestamp,
         'lit':            bed_label,
         'encounterId':    encounter_id,
         'score_sévérité': round(float(score), 4)
     })
-    
-    # Remplissage des sous-scores
     if sub_scores:
         for k, v in sub_scores.items():
             if k in COLUMNS:
                 row_data[k] = round(float(v), 4)
-            
-    df_new = pd.DataFrame([row_data])
-    
+
+    df_new = pd.DataFrame([row_data])[COLUMNS]
+
     with file_lock:
-        # forcer ordre des colonnes avant l'écriture
-        df_new = df_new[COLUMNS]
         if filepath.exists():
-            df_new.to_csv(filepath, sep=';', mode='a', header=False, index=False, encoding='utf-8')
+            df_existing = pd.read_csv(filepath, sep=';', on_bad_lines='skip')
+            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
         else:
-            df_new.to_csv(filepath, sep=';', mode='w', header=True, index=False, encoding='utf-8')
+            df_combined = df_new
+
+        df_combined['date_calcul'] = pd.to_datetime(df_combined['date_calcul'], errors='coerce')
+        cutoff = pd.Timestamp.now() - timedelta(days=_RETENTION_DAYS)
+        df_combined = df_combined[df_combined['date_calcul'] >= cutoff]
+        df_combined = df_combined.drop_duplicates(subset=['lit', 'date_calcul'], keep='last')
+        df_combined.to_csv(filepath, sep=';', index=False, encoding='utf-8')
 
 def save_patient_history(bed_label, history_data):
     """Génère l'historique 6h pour un lit (utilisé pour les graphiques)."""

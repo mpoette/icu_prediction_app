@@ -54,9 +54,8 @@ def plot_patient_trajectory(bed_label):
         plt.legend(loc='upper left')
         plt.tight_layout()
         
-        # Affichage du graphique
         print(f" └── Génération de la courbe pour le lit {bed_label}...")
-        plt.show()
+        plt.close()
 
     except Exception as e:
         print(f" [ERREUR GRAPHIQUE] Échec du tracé pour le lit {bed_label} : {e}")

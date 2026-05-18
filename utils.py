@@ -1,17 +1,20 @@
 import json
+import functools
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
 
 # --- CONFIGURATION ET CONNEXION ---
 
+@functools.lru_cache(maxsize=4)
 def load_thesaurus(filepath: str = 'thesaurus.json') -> dict:
     """Charge la configuration des variables cliniques."""
     with open(filepath, 'r', encoding='utf-8') as f:
         return json.load(f)
 
+@functools.lru_cache(maxsize=4)
 def get_db_engine(server: str, database: str):
-    """Génère le moteur de connexion SQL Server."""
+    """Génère le moteur de connexion SQL Server (une instance par (server, database))."""
     return create_engine(f'mssql+pymssql://@{server}/{database}')
 
 # --- EXTRACTION ---
@@ -301,6 +304,7 @@ def extract_feature(engine, encounter_id: int, config: dict) -> pd.DataFrame:
 
 def apply_generic_aggregation(df: pd.DataFrame, thesaurus: dict, id_col: str, time_col: str) -> pd.DataFrame:
     """Agrège les données selon les méthodes définies (median, sum, max)."""
+    df = df.copy()
     agg_map = {}
     for feat_id, config in thesaurus["features"].items():
         if config.get('type') in ('static', 'source_only', 'derived'):

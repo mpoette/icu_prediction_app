@@ -1,5 +1,6 @@
 import pandas as pd
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import config as cfg
 import utils
 
@@ -89,12 +90,21 @@ def load_data_from_sql(target_bed=None, reference_utc: datetime = None):
 
     pid = patient['encounterId']
     thesaurus = utils.load_thesaurus('thesaurus.json')
-    results = []
 
-    for feat_id, feat_cfg in thesaurus["features"].items():
-        if feat_cfg.get("type") == "static": continue
-        df_feat = utils.extract_feature(engine, pid, feat_cfg)
-        if not df_feat.empty: results.append(df_feat)
+    features = [(fid, fcfg) for fid, fcfg in thesaurus["features"].items()
+                if fcfg.get("type") != "static"]
+
+    results = []
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(utils.extract_feature, engine, pid, fcfg): fid
+                   for fid, fcfg in features}
+        for future in as_completed(futures):
+            try:
+                df_feat = future.result()
+                if not df_feat.empty:
+                    results.append(df_feat)
+            except Exception as e:
+                print(f" │   [WARN extract] {futures[future]} : {e}")
 
     if not results:
         print(f" │   └─ ✕ Aucune mesure clinique exploitable.")

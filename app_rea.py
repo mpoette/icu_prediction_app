@@ -405,11 +405,11 @@ def render_detail_panel(bed, active_encounters, df_valid=None):
     with c_title:
         st.markdown(f"#### Analyse détaillée — Lit {bed} {enc_badge}")
     with c_btn1:
-        if st.button("Calculer", key="run_hist", use_container_width=True):
+        if st.button("Calculer", key="run_hist", width='stretch'):
             st.session_state.pending_run = bed
             st.rerun()
     with c_btn2:
-        if st.button("✕", key="close_panel", use_container_width=True):
+        if st.button("✕", key="close_panel", width='stretch'):
             st.session_state.selected_bed = None
             st.rerun()
 
@@ -426,13 +426,13 @@ def render_detail_panel(bed, active_encounters, df_valid=None):
         now = datetime.now()
         col_slider, col_info, col_run = st.columns([4, 3, 2], gap="small")
         with col_slider:
-            hour_offset = st.slider("", 0, 100, value=st.session_state[_saved_key], key=f"slider_{bed}")
+            hour_offset = st.slider("Heures en arrière", 0, 100, value=st.session_state[_saved_key], key=f"slider_{bed}", label_visibility="collapsed")
         with col_info:
             target_dt = now - __import__("datetime").timedelta(hours=hour_offset)
             st.metric("Heure ciblee", target_dt.strftime("%d/%m %H:%M"))
         with col_run:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("Calculer", key=f"run_hour_{bed}", use_container_width=True):
+            if st.button("Calculer", key=f"run_hour_{bed}", width='stretch'):
                 _h = st.session_state.get(f"slider_{bed}", hour_offset)
                 st.session_state[_saved_key] = _h
                 st.session_state.pending_hour_run = (bed, _h)
@@ -495,7 +495,7 @@ def render_detail_panel(bed, active_encounters, df_valid=None):
         disp["Δ"] = disp[target_col].diff(-1).mul(-1).round(4)
         disp = disp[["date_calcul", target_col, "Δ"]].rename(columns={"date_calcul": "Heure", target_col: "Score"})
         disp["Heure"] = disp["Heure"].dt.strftime("%H:%M")
-        st.dataframe(disp, use_container_width=True, hide_index=True)
+        st.dataframe(disp, width='stretch', hide_index=True)
 
     st.markdown("---")
 
@@ -545,7 +545,7 @@ with h2:
         st.session_state.cache_version += 1; st.rerun()
 with h3:
     st.markdown("<div style='font-size:0.78rem;color:#64748b;margin-bottom:2px'>Décalage (heures)</div>", unsafe_allow_html=True)
-    global_hour = st.number_input("", min_value=0, value=0, step=1,
+    global_hour = st.number_input("Décalage (heures)", min_value=0, value=0, step=1,
                                    key="global_hour_input", label_visibility="collapsed")
     
     from datetime import datetime, timedelta
@@ -743,7 +743,7 @@ for row_beds in rows:
 
             btn_label = "✕ Fermer" if is_sel else "Historique"
             btn_disabled = not is_occupied and not load_patient(bed, _version=st.session_state.cache_version).shape[0]
-            if st.button(btn_label, key=f"btn_{bed}", use_container_width=True, disabled=btn_disabled):
+            if st.button(btn_label, key=f"btn_{bed}", width='stretch', disabled=btn_disabled):
                 if is_sel:
                     st.session_state.selected_bed = None
                 else:

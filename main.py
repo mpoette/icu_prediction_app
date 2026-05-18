@@ -28,7 +28,7 @@ import utils
 import os
 import config as cfg
 
-MAX_WORKERS = 2 #os.cpu_count()
+MAX_WORKERS = min((os.cpu_count() or 2) * 2, 8)
 
 _UTC_OFFSET = timedelta(seconds=(datetime.now() - datetime.utcnow()).total_seconds())
 
@@ -137,7 +137,7 @@ def process_single_hour(lit, hour_offset):
         load.save_patient_history(official_label, df_hist.to_dict('records'))
         
         # Signal pour Streamlit
-        print(f"__SCORE_RESULT__ {scores[0]:.4f} | {official_label} | H-{hour_offset} | {reference_local}")
+        print(f"SCORE_RESULT {scores[0]:.4f} | {official_label} | H-{hour_offset} | {reference_local}")
 
     except Exception as e:
         print(f" [ERREUR PONCTUEL] {e}")
