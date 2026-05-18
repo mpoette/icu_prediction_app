@@ -20,7 +20,7 @@
       },
       "agg_method": "median",
       "imputation_method": "interpolate_ffill_bfill",
-      "default_value": 0.0
+      "default_value": 70.0
     },
     "PAD": {
       "column": "pad",
@@ -42,7 +42,7 @@
       },
       "agg_method": "median",
       "imputation_method": "interpolate_ffill_bfill",
-      "default_value": 0.0
+      "default_value": 60.0
     },
     "HEART_RATE": {
       "column": "heart_rate",
@@ -59,7 +59,7 @@
       ],
       "agg_method": "median",
       "imputation_method": "interpolate_ffill_bfill",
-      "default_value": 0.0
+      "default_value": 70.0
     },
     "SPO2": {
       "column": "spo2",
@@ -75,7 +75,7 @@
       ],
       "agg_method": "median",
       "imputation_method": "interpolate_ffill_bfill",
-      "default_value": 0.0
+      "default_value": 100.0
     },
     "TEMPERATURE": {
       "column": "temp",
@@ -87,7 +87,7 @@
       ],
       "agg_method": "median",
       "imputation_method": "interpolate_ffill_bfill",
-      "default_value": 0.0
+      "default_value": 37.0
     },
     "FIO2": {
       "column": "fio2_corr",

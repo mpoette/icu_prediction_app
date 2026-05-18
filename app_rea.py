@@ -25,6 +25,10 @@ import subprocess, sys, os
 from datetime import datetime
 from pathlib import Path
 
+# ── Seuils de sévérité ────────────────────────────────────────────────────────
+SEUIL_CRITIQUE  = 0.70
+SEUIL_VIGILANCE = 0.40
+
 st.set_page_config(page_title="SEVERITE REA", page_icon="", layout="wide")
 
 st.markdown("""
@@ -88,13 +92,30 @@ st.markdown("""
         box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
     }
     
-    /* Carte de détail patient */
-    .detail-container {
-        background: #ffffff;
+    /* Onglets verticaux (radio simulant des tabs) */
+    div[data-testid="stRadio"] > div {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    div[data-testid="stRadio"] label {
+        display: block;
+        padding: 7px 12px;
+        border-radius: 6px;
         border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 20px;
-        margin-top: 20px;
+        background: #f8fafc;
+        color: #475569;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+    }
+    div[data-testid="stRadio"] label:has(input:checked) {
+        background: #eff6ff;
+        border-color: #3b82f6;
+        color: #1d4ed8;
+        box-shadow: 0 1px 3px rgba(59,130,246,0.15);
     }
 </style>""", unsafe_allow_html=True)
 
@@ -224,34 +245,34 @@ def run_pipeline_at_hour(bed, hour_offset: int):
 
 def badge(score):
     if score is None: return "–", "none", "N/A"
-    if score >= 0.75: return f"{score:.2f}", "crit", "CRITIQUE"
-    if score >= 0.50: return f"{score:.2f}", "warn", "VIGILANCE"
+    if score >= SEUIL_CRITIQUE:  return f"{score:.2f}", "crit", "CRITIQUE"
+    if score >= SEUIL_VIGILANCE: return f"{score:.2f}", "warn", "VIGILANCE"
     return f"{score:.2f}", "ok", "STABLE"
 
 def get_score_colors(score):
     """Retourne un tuple (background, texte/bordure) selon le score."""
     if score is None: return "#f0f0f0", "#888"
-    if score >= 0.75: return "#ffebee", "#c62828"  # Rouge (Critique)
-    if score >= 0.50: return "#fff3e0", "#f57c00"  # Orange (Vigilance)
+    if score >= SEUIL_CRITIQUE:  return "#ffebee", "#c62828"
+    if score >= SEUIL_VIGILANCE: return "#fff3e0", "#f57c00"
     return "#e8f5e9", "#2e7d32"
 
 #  Plot 
 def plot_trajectory(df, bed, col="score_sévérité"):
     fig, ax = plt.subplots(figsize=(7, 2.8))
-    ax.axhspan(.75, 1.05, color="#ffebee", alpha=.5)
-    ax.axhspan(.50, .75,  color="#fff8e1", alpha=.5)
-    
+    ax.axhspan(SEUIL_CRITIQUE,  1.05,            color="#ffebee", alpha=.5)
+    ax.axhspan(SEUIL_VIGILANCE, SEUIL_CRITIQUE,  color="#fff8e1", alpha=.5)
+
     dates = df["date_calcul"].values
     scores = df[col].values
-    
+
     for i in range(len(scores)-1):
         if pd.isna(scores[i]) or pd.isna(scores[i+1]): continue
-        c = "#c62828" if scores[i]>=.75 else "#f57c00" if scores[i]>=.50 else "#2e7d32"
+        c = "#c62828" if scores[i] >= SEUIL_CRITIQUE else "#f57c00" if scores[i] >= SEUIL_VIGILANCE else "#2e7d32"
         ax.plot(dates[i:i+2], scores[i:i+2], color=c, lw=2.5)
-        
+
     for d, s in zip(dates, scores):
         if pd.isna(s): continue
-        c = "#c62828" if s>=.75 else "#f57c00" if s>=.50 else "#2e7d32"
+        c = "#c62828" if s >= SEUIL_CRITIQUE else "#f57c00" if s >= SEUIL_VIGILANCE else "#2e7d32"
         ax.scatter(d, s, color=c, s=50, zorder=5, edgecolors="white", lw=1.5)
     
     ax.set_ylim(-0.05, 1.05)
@@ -287,9 +308,9 @@ def plot_radar_chart(last_row, sys_cols):
     angles_closed = angles + [angles[0]]
     values_closed = values + [values[0]]
 
-    if global_score >= 0.75:
+    if global_score >= SEUIL_CRITIQUE:
         fill_color, line_color = "#ffebee", "#c62828"
-    elif global_score >= 0.50:
+    elif global_score >= SEUIL_VIGILANCE:
         fill_color, line_color = "#fff3e0", "#f57c00"
     else:
         fill_color, line_color = "#e8f5e9", "#2e7d32"
@@ -300,7 +321,7 @@ def plot_radar_chart(last_row, sys_cols):
 
     # Cercles de seuil
     theta = np.linspace(0, 2 * np.pi, 200)
-    for thresh, col_thresh in [(0.75, "#c62828"), (0.50, "#f57c00")]:
+    for thresh, col_thresh in [(SEUIL_CRITIQUE, "#c62828"), (SEUIL_VIGILANCE, "#f57c00")]:
         ax.plot(theta, [thresh] * 200, color=col_thresh, linewidth=0.8, linestyle="--", alpha=0.45)
 
     ax.set_xticks(angles)
@@ -471,69 +492,72 @@ def render_detail_panel(bed, active_encounters, df_valid=None):
 
     last_row = df_hist.iloc[-1]
 
-    # Identification des colonnes
+    # Colonnes sous-domaines disponibles
     sys_cols = [c for c in df_hist.columns if c.startswith('sys_') and df_hist[c].notna().any()
                 and c.lower().replace('sys_', '').strip() not in ('global', 'score')]
 
-    # Radar chart (snapshot courant, scores corrigés)
-    fig_radar = plot_radar_chart(last_row, sys_cols)
-    if fig_radar:
-        rc, _ = st.columns([1, 1])
-        with rc:
+    # Scores sous-domaines corrigés heure par heure (× score_sévérité de la même ligne)
+    df_corrected = df_hist.copy()
+    for col in sys_cols:
+        df_corrected[col] = (df_corrected[col] * df_corrected['score_sévérité']).round(4)
+
+    # 6 derniers points
+    df_hist6 = df_hist.sort_values("date_calcul").tail(6)
+    df_corr6 = df_corrected.sort_values("date_calcul").tail(6)
+
+    # ── Layout : Radar (gauche) | Onglets verticaux + Courbe (droite) ────
+    col_radar, col_hist = st.columns([2, 3], gap="medium")
+
+    with col_radar:
+        fig_radar = plot_radar_chart(last_row, sys_cols)
+        if fig_radar:
             st.pyplot(fig_radar)
-        plt.close(fig_radar)
+            plt.close(fig_radar)
+        else:
+            st.info("Données insuffisantes pour le radar.")
 
-    target_col = render_styled_selector(last_row, sys_cols)
+    with col_hist:
+        st.markdown("<p style='font-size:0.78rem;font-weight:700;color:#475569;text-transform:uppercase;margin-bottom:6px'>Évolution 6h</p>", unsafe_allow_html=True)
 
-    # Affichage courbe et tableau
-    gc, tc = st.columns([3, 2])
-    with gc:
-        st.pyplot(plot_trajectory(df_hist, bed, col=target_col))
-    with tc:
-        disp = df_hist.sort_values("date_calcul", ascending=False).copy()
-        # Calcul Delta
-        disp["Δ"] = disp[target_col].diff(-1).mul(-1).round(4)
-        disp = disp[["date_calcul", target_col, "Δ"]].rename(columns={"date_calcul": "Heure", target_col: "Score"})
-        disp["Heure"] = disp["Heure"].dt.strftime("%H:%M")
-        st.dataframe(disp, width='stretch', hide_index=True)
+        global_val = float(last_row["score_sévérité"]) if pd.notna(last_row.get("score_sévérité")) else None
+        tab_labels = [f"SÉVÉRITÉ ({global_val:.2f})" if global_val is not None else "SÉVÉRITÉ"]
+        tab_cols   = ["score_sévérité"]
+        for col in sys_cols:
+            v_raw = last_row.get(col)
+            name  = col.replace('sys_', '').replace('_', ' ').upper()
+            if pd.notna(v_raw) and global_val is not None:
+                tab_labels.append(f"{name} ({float(v_raw) * global_val:.2f})")
+            else:
+                tab_labels.append(name)
+            tab_cols.append(col)
+
+        vtab, vchart = st.columns([1, 2.8], gap="small")
+
+        with vtab:
+            sel_idx = st.radio(
+                "Système",
+                range(len(tab_labels)),
+                format_func=lambda i: tab_labels[i],
+                key=f"vtab_{bed}",
+                label_visibility="collapsed"
+            )
+
+        target_col = tab_cols[sel_idx]
+        df_plot    = df_hist6 if target_col == "score_sévérité" else df_corr6
+
+        with vchart:
+            fig = plot_trajectory(df_plot, bed, col=target_col)
+            st.pyplot(fig)
+            plt.close(fig)
+
+            disp = df_plot.sort_values("date_calcul", ascending=False).copy()
+            disp["Δ"] = disp[target_col].diff(-1).mul(-1).round(4)
+            disp = disp[["date_calcul", target_col, "Δ"]].rename(
+                columns={"date_calcul": "Heure", target_col: "Score"})
+            disp["Heure"] = disp["Heure"].dt.strftime("%H:%M")
+            st.dataframe(disp, hide_index=True)
 
     st.markdown("---")
-
-def render_styled_selector(last_row, sys_cols):
-    """Génère un sélecteur de dimensions sous forme de segments colorés (Pills)."""
-
-    global_score = last_row.get("score_sévérité")
-    global_val = float(global_score) if pd.notna(global_score) else None
-    options_map = {}
-
-    g_icon = "🔴" if (global_val is not None and global_val >= 0.75) else "🟠" if (global_val is not None and global_val >= 0.50) else "🟢"
-    g_label = f"{g_icon} SEVERITE ({global_val:.2f})" if global_val is not None else "🔵 GLOBAL"
-    options_map[g_label] = "score_sévérité"
-
-    # Labels systèmes physiologiques — scores corrigés (× score global)
-    for col in sys_cols:
-        v_raw = last_row.get(col)
-        name = col.replace('sys_', '').replace('_', ' ').upper()
-        if pd.notna(v_raw) and global_val is not None:
-            v = float(v_raw) * global_val
-            icon = "🔴" if v >= 0.75 else "🟠" if v >= 0.50 else "🟢"
-            label = f"{icon} {name} ({v:.2f})"
-        else:
-            icon = "🟢"
-            label = f"{icon} {name}"
-        options_map[label] = col
-
-    st.markdown("<p style='font-size:0.85rem; font-weight:700; color:#475569; margin-bottom:10px; margin-top:15px;'>SYSTÈME ANALYSÉ</p>", unsafe_allow_html=True)
-    
-    selected_label = st.segmented_control(
-        label="Dimension Selection",
-        options=list(options_map.keys()),
-        default=list(options_map.keys())[0],
-        label_visibility="collapsed",
-        key=f"seg_{last_row['lit']}"
-    )
-    
-    return options_map.get(selected_label, "score_sévérité")
 
 # LAYOUT PRINCIPAL
 
@@ -659,9 +683,9 @@ if not df_valid.empty:
     last_all = df_valid.sort_values("date_calcul").groupby("lit")["score_sévérité"].last()
     
     occ = len(occupied_beds)
-    crit = int((last_all >= .75).sum())
-    warn = int(((last_all >= .50) & (last_all < .75)).sum())
-    stab = int((last_all < .50).sum())
+    crit = int((last_all >= SEUIL_CRITIQUE).sum())
+    warn = int(((last_all >= SEUIL_VIGILANCE) & (last_all < SEUIL_CRITIQUE)).sum())
+    stab = int((last_all < SEUIL_VIGILANCE).sum())
 
     st.markdown(f"""
     <div style="display: flex; gap: 15px; text-align: center; margin-bottom: 20px;">
@@ -670,15 +694,15 @@ if not df_valid.empty:
             <div style="font-size: 1.8rem; font-weight: bold; color: #333;">{occ}</div>
         </div>
         <div style="flex: 1; padding: 12px; border-radius: 6px; background: #ffebee; border: 1px solid #ffcdd2; border-top: 4px solid #c62828;">
-            <div style="font-size: 0.85rem; color: #c62828; text-transform: uppercase; font-weight: 600;">Critique (≥ 0.75)</div>
+            <div style="font-size: 0.85rem; color: #c62828; text-transform: uppercase; font-weight: 600;">Critique (≥ {SEUIL_CRITIQUE})</div>
             <div style="font-size: 1.8rem; font-weight: bold; color: #c62828;">{crit}</div>
         </div>
         <div style="flex: 1; padding: 12px; border-radius: 6px; background: #fff3e0; border: 1px solid #ffe0b2; border-top: 4px solid #f57c00;">
-            <div style="font-size: 0.85rem; color: #f57c00; text-transform: uppercase; font-weight: 600;">Vigilance (0.50–0.75)</div>
+            <div style="font-size: 0.85rem; color: #f57c00; text-transform: uppercase; font-weight: 600;">Vigilance ({SEUIL_VIGILANCE}–{SEUIL_CRITIQUE})</div>
             <div style="font-size: 1.8rem; font-weight: bold; color: #f57c00;">{warn}</div>
         </div>
         <div style="flex: 1; padding: 12px; border-radius: 6px; background: #e8f5e9; border: 1px solid #c8e6c9; border-top: 4px solid #2e7d32;">
-            <div style="font-size: 0.85rem; color: #2e7d32; text-transform: uppercase; font-weight: 600;">Stables (&lt; 0.50)</div>
+            <div style="font-size: 0.85rem; color: #2e7d32; text-transform: uppercase; font-weight: 600;">Stables (&lt; {SEUIL_VIGILANCE})</div>
             <div style="font-size: 1.8rem; font-weight: bold; color: #2e7d32;">{stab}</div>
         </div>
     </div>
