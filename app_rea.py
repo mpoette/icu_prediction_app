@@ -128,7 +128,9 @@ CSV  = OUT / "historique_scores_rea.csv"
 for k, v in [("selected_bed", None), ("pending_run", None), ("run_logs", ""),
              ("last_execution_log", ""),
              ("run_ok", None), ("pending_hour_run", None), ("hour_score_result", None),
-             ("hour_score_label", ""), ("hour_score_vector", {}), ("main_score_vector", {}), ("cache_version", 0), ("last_scan_hour", 0), ("last_scan_ref", ""), ("last_scan_utc", None)]:
+             ("hour_score_label", ""), ("hour_score_vector", {}), ("main_score_vector", {}),
+             ("cache_version", 0), ("last_scan_hour", 0), ("last_scan_ref", ""),
+             ("last_scan_utc", None), ("show_cohort_overview", False)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -193,6 +195,119 @@ def get_all_service_beds():
         return sorted(beds, key=lambda b: int(''.join(filter(str.isdigit, str(b))) or 0))
     except Exception:
         return []
+
+@st.cache_data(ttl=60)
+def get_service_clinical_summary(encounter_ids_tuple: tuple, _version=0) -> dict:
+    """Indicateurs cliniques agrégés pour la cohorte active (ventilation, NAD, dialyse, fièvre)."""
+    if not encounter_ids_tuple:
+        return {}
+    try:
+        sys.path.insert(0, str(BASE))
+        import utils, config as cfg
+        engine = utils.get_db_engine(cfg.SQL_SERVER, cfg.SQL_DATABASE)
+        thesaurus = utils.load_thesaurus('thesaurus.json')
+
+        enc_sql = ",".join(str(e) for e in encounter_ids_tuple)
+        out = {}
+
+        # ── Ventilés (VentMode invasif dans les 4 dernières heures) ─────────
+        q_vent = f"""
+            SELECT COUNT(DISTINCT pa.encounterId) AS n
+            FROM DAR.PatientAssessment pa
+            JOIN M_dictionary md
+              ON pa.attributeId = md.attributeId AND pa.interventionId = md.interventionId
+            WHERE pa.encounterId IN ({enc_sql})
+              AND (md.dictionaryPropName LIKE '%VentMode%'
+                   OR md.dictionaryPropName LIKE '%Mode_ventilatoire%')
+              AND pa.valueString IS NOT NULL
+              AND pa.valueString NOT LIKE '%Veille%'
+              AND pa.valueString NOT LIKE '%VS%'
+              AND pa.utcChartTime >= DATEADD(hour, -4, GETUTCDATE())
+        """
+        out["n_ventile"] = int(pd.read_sql_query(q_vent, engine).iloc[0, 0] or 0)
+
+        # ── NAD (noradrénaline active dans les 4 dernières heures) ──────────
+        nad_feat = next((f for f in thesaurus["features"].values()
+                         if f.get("column") == "nad_dose_poids"), None)
+        if nad_feat:
+            int_labels = nad_feat.get("intervention_labels", [])
+            prop_names  = nad_feat.get("prop_names", [])
+            if int_labels and prop_names:
+                int_sql  = "'" + "','".join(int_labels) + "'"
+                prop_sql = "'" + "','".join(prop_names)  + "'"
+                q_nad = f"""
+                    SELECT COUNT(DISTINCT pm.encounterId) AS n
+                    FROM DAR.patientMedication pm
+                    WHERE pm.encounterId IN ({enc_sql})
+                      AND pm.interventionId IN (
+                          SELECT interventionId FROM M_dictionary
+                          WHERE dictionaryLabel IN ({int_sql})
+                      )
+                      AND pm.dictionaryPropName IN ({prop_sql})
+                      AND pm.valueNumber > 0
+                      AND pm.utcChartTime >= DATEADD(hour, -4, GETUTCDATE())
+                """
+                out["n_nad"] = int(pd.read_sql_query(q_nad, engine).iloc[0, 0] or 0)
+            else:
+                out["n_nad"] = None
+        else:
+            out["n_nad"] = None
+
+        # ── Dialysés (HDI ou CVVHF dans les 4 dernières heures) ─────────────
+        dial_feat = next((f for f in thesaurus["features"].values()
+                          if f.get("type") == "dialyse"), None)
+        if dial_feat:
+            codes = dial_feat.get("codes", {})
+            all_dial = codes.get("hdi", []) + codes.get("cvvhf", [])
+            if all_dial:
+                all_dial_sql = "'" + "','".join(all_dial) + "'"
+                q_dial = f"""
+                    SELECT COUNT(DISTINCT pa.encounterId) AS n
+                    FROM PtAssessment pa
+                    JOIN M_dictionary md
+                      ON pa.attributeId = md.attributeId AND pa.interventionId = md.interventionId
+                    WHERE pa.encounterId IN ({enc_sql})
+                      AND md.dictionaryPropName IN ({all_dial_sql})
+                      AND pa.valueNumber > 0
+                      AND pa.utcChartTime >= DATEADD(hour, -4, GETUTCDATE())
+                """
+                out["n_dialyse"] = int(pd.read_sql_query(q_dial, engine).iloc[0, 0] or 0)
+            else:
+                out["n_dialyse"] = None
+        else:
+            out["n_dialyse"] = None
+
+        # ── Fébriles (température ≥ 38.3 °C dans les 4 dernières heures) ────
+        temp_feat = next(
+            (f for fid, f in thesaurus["features"].items()
+             if "temp" in fid.lower()
+             or "temp" in str(f.get("column", "")).lower()),
+            None
+        )
+        if temp_feat:
+            temp_codes = temp_feat.get("codes", [])
+            if isinstance(temp_codes, list) and temp_codes:
+                temp_sql = "'" + "','".join(temp_codes) + "'"
+                q_temp = f"""
+                    SELECT COUNT(DISTINCT pa.encounterId) AS n
+                    FROM PtAssessment pa
+                    JOIN M_dictionary md
+                      ON pa.attributeId = md.attributeId AND pa.interventionId = md.interventionId
+                    WHERE pa.encounterId IN ({enc_sql})
+                      AND md.dictionaryPropName IN ({temp_sql})
+                      AND pa.valueNumber >= 38.3
+                      AND pa.utcChartTime >= DATEADD(hour, -4, GETUTCDATE())
+                """
+                out["n_febrile"] = int(pd.read_sql_query(q_temp, engine).iloc[0, 0] or 0)
+            else:
+                out["n_febrile"] = None
+        else:
+            out["n_febrile"] = None
+
+        return out
+    except Exception as e:
+        return {"error": str(e)}
+
 
 def run_pipeline(bed="", mode="global", hour_offset=0):
     cmd = [sys.executable, str(BASE/"main.py")] + ([str(bed)] if mode=="history" else [])
@@ -561,12 +676,18 @@ def render_detail_panel(bed, active_encounters, df_valid=None):
 
 # LAYOUT PRINCIPAL
 
-h1, h2, h3, h4 = st.columns([3.5, 1, 1.2, 1.5])
+h1, h2, h3, h4, h5 = st.columns([3.5, 1, 1.2, 1.5, 1.3])
 h1.title("Etat du service de réanimation")
 with h2:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("⟳ Rafraîchir"):
         st.session_state.cache_version += 1; st.rerun()
+with h5:
+    st.markdown("<br>", unsafe_allow_html=True)
+    lbl = "▲ Vue cohorte" if st.session_state.show_cohort_overview else "▼ Vue cohorte"
+    if st.button(lbl, key="btn_cohort_overview"):
+        st.session_state.show_cohort_overview = not st.session_state.show_cohort_overview
+        st.rerun()
 with h3:
     st.markdown("<div style='font-size:0.78rem;color:#64748b;margin-bottom:2px'>Décalage (heures)</div>", unsafe_allow_html=True)
     global_hour = st.number_input("Décalage (heures)", min_value=0, value=0, step=1,
@@ -707,7 +828,51 @@ if not df_valid.empty:
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
+
+    # ── Panneau Vue cohorte ───────────────────────────────────────────────────
+    if st.session_state.show_cohort_overview:
+        scores_arr = last_all.dropna().values
+        score_mean = float(np.mean(scores_arr)) if len(scores_arr) else None
+        score_sd   = float(np.std(scores_arr))  if len(scores_arr) else None
+
+        enc_ids_tuple = tuple(sorted(str(v) for v in active_encounters.values())) if active_encounters else ()
+        clin = get_service_clinical_summary(enc_ids_tuple, _version=st.session_state.cache_version)
+
+        with st.container(border=True):
+            st.caption(f"VUE COHORTE — {occ} PATIENTS ACTIFS")
+            if "error" in clin:
+                st.warning(f"Données cliniques partielles : {clin['error']}")
+
+            c0, c1, c2, c3, c4 = st.columns(5)
+
+            with c0:
+                if score_mean is not None:
+                    sc_color = "#c62828" if score_mean >= SEUIL_CRITIQUE else "#f57c00" if score_mean >= SEUIL_VIGILANCE else "#2e7d32"
+                    st.markdown(f"<div style='font-size:0.72rem;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:4px'>Score sévérité</div>"
+                                f"<div style='font-size:1.6rem;font-weight:800;color:{sc_color};font-family:monospace'>{score_mean:.2f}</div>"
+                                f"<div style='font-size:0.75rem;color:#94a3b8'>± {score_sd:.2f} SD</div>",
+                                unsafe_allow_html=True)
+                else:
+                    st.metric("Score sévérité", "N/A")
+
+            def _cohort_metric(col, icon, label, n_val):
+                with col:
+                    if n_val is None:
+                        st.markdown(f"<div style='font-size:0.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase;margin-bottom:4px'>{icon} {label}</div>"
+                                    f"<div style='font-size:1.6rem;font-weight:800;color:#94a3b8;font-family:monospace'>N/A</div>",
+                                    unsafe_allow_html=True)
+                    else:
+                        pct = f"{n_val / occ * 100:.0f} %" if occ else "–"
+                        st.markdown(f"<div style='font-size:0.72rem;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:4px'>{icon} {label}</div>"
+                                    f"<div style='font-size:1.6rem;font-weight:800;color:#1e293b;font-family:monospace'>{n_val}</div>"
+                                    f"<div style='font-size:0.75rem;color:#94a3b8'>{pct}</div>",
+                                    unsafe_allow_html=True)
+
+            _cohort_metric(c1, "🫁", "Ventilés",  clin.get("n_ventile"))
+            _cohort_metric(c2, "💉", "Sous NAD",  clin.get("n_nad"))
+            _cohort_metric(c3, "🔄", "Dialysés",  clin.get("n_dialyse"))
+            _cohort_metric(c4, "🌡", "Fébriles",  clin.get("n_febrile"))
+
     st.divider()
 
 if not beds:
