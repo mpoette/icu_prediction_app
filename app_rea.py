@@ -17,6 +17,7 @@
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.dates as mdates
@@ -262,6 +263,57 @@ def plot_trajectory(df, bed, col="score_sévérité"):
     return fig
 
 
+def plot_radar_chart(last_row, sys_cols):
+    """Diagramme en étoile des scores sous-domaines corrigés (× score global)."""
+    global_score = last_row.get("score_sévérité")
+    if global_score is None or pd.isna(global_score):
+        return None
+
+    labels, values = [], []
+    for col in sys_cols:
+        raw = last_row.get(col)
+        if raw is None or pd.isna(raw):
+            continue
+        corrected = float(raw) * float(global_score)
+        name = col.replace("sys_", "").replace("_", " ").upper()
+        labels.append(f"{name}\n({corrected:.2f})")
+        values.append(corrected)
+
+    if len(labels) < 2:
+        return None
+
+    N = len(labels)
+    angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
+    angles_closed = angles + [angles[0]]
+    values_closed = values + [values[0]]
+
+    if global_score >= 0.75:
+        fill_color, line_color = "#ffebee", "#c62828"
+    elif global_score >= 0.50:
+        fill_color, line_color = "#fff3e0", "#f57c00"
+    else:
+        fill_color, line_color = "#e8f5e9", "#2e7d32"
+
+    fig, ax = plt.subplots(figsize=(4.5, 4.5), subplot_kw=dict(polar=True))
+    ax.plot(angles_closed, values_closed, color=line_color, linewidth=2)
+    ax.fill(angles_closed, values_closed, color=fill_color, alpha=0.55)
+
+    # Cercles de seuil
+    theta = np.linspace(0, 2 * np.pi, 200)
+    for thresh, col_thresh in [(0.75, "#c62828"), (0.50, "#f57c00")]:
+        ax.plot(theta, [thresh] * 200, color=col_thresh, linewidth=0.8, linestyle="--", alpha=0.45)
+
+    ax.set_xticks(angles)
+    ax.set_xticklabels(labels, size=8, fontweight="bold")
+    ax.set_ylim(0, 1)
+    ax.set_yticks([0.25, 0.50, 0.75, 1.0])
+    ax.set_yticklabels(["0.25", "0.50", "0.75", "1.0"], size=7, color="#aaa")
+    ax.set_title(f"Score global : {float(global_score):.2f}", pad=20, fontsize=10, fontweight="bold", color=line_color)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    return fig
+
+
 def render_vector_table(vec: dict, source_label: str = "", expanded: bool = True):
     """Affiche les features clinique sous forme de tableau HTML."""
     if not vec:
@@ -418,10 +470,18 @@ def render_detail_panel(bed, active_encounters, df_valid=None):
         return
 
     last_row = df_hist.iloc[-1]
-    
+
     # Identification des colonnes
     sys_cols = [c for c in df_hist.columns if c.startswith('sys_') and df_hist[c].notna().any()
                 and c.lower().replace('sys_', '').strip() not in ('global', 'score')]
+
+    # Radar chart (snapshot courant, scores corrigés)
+    fig_radar = plot_radar_chart(last_row, sys_cols)
+    if fig_radar:
+        rc, _ = st.columns([1, 1])
+        with rc:
+            st.pyplot(fig_radar)
+        plt.close(fig_radar)
 
     target_col = render_styled_selector(last_row, sys_cols)
 
@@ -441,22 +501,26 @@ def render_detail_panel(bed, active_encounters, df_valid=None):
 
 def render_styled_selector(last_row, sys_cols):
     """Génère un sélecteur de dimensions sous forme de segments colorés (Pills)."""
-    
-    # scores pour les labels
+
     global_score = last_row.get("score_sévérité")
+    global_val = float(global_score) if pd.notna(global_score) else None
     options_map = {}
-    
-    g_icon = "🔴" if (pd.notna(global_score) and global_score >= 0.75) else "🟠" if (pd.notna(global_score) and global_score >= 0.50) else "🟢"
-    g_label = f"{g_icon} SEVERITE ({global_score:.2f})" if pd.notna(global_score) else "🔵 GLOBAL"
+
+    g_icon = "🔴" if (global_val is not None and global_val >= 0.75) else "🟠" if (global_val is not None and global_val >= 0.50) else "🟢"
+    g_label = f"{g_icon} SEVERITE ({global_val:.2f})" if global_val is not None else "🔵 GLOBAL"
     options_map[g_label] = "score_sévérité"
-    
-    # Labels systèmes physiologiques
+
+    # Labels systèmes physiologiques — scores corrigés (× score global)
     for col in sys_cols:
-        v = last_row.get(col)
+        v_raw = last_row.get(col)
         name = col.replace('sys_', '').replace('_', ' ').upper()
-        icon = "🔴" if (pd.notna(v) and v >= 0.75) else "🟠" if (pd.notna(v) and v >= 0.50) else "🟢"
-        label = f"{icon} {name}"
-        if pd.notna(v): label += f" ({v:.2f})"
+        if pd.notna(v_raw) and global_val is not None:
+            v = float(v_raw) * global_val
+            icon = "🔴" if v >= 0.75 else "🟠" if v >= 0.50 else "🟢"
+            label = f"{icon} {name} ({v:.2f})"
+        else:
+            icon = "🟢"
+            label = f"{icon} {name}"
         options_map[label] = col
 
     st.markdown("<p style='font-size:0.85rem; font-weight:700; color:#475569; margin-bottom:10px; margin-top:15px;'>SYSTÈME ANALYSÉ</p>", unsafe_allow_html=True)
