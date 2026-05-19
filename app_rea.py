@@ -25,6 +25,13 @@ import subprocess, sys, os
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import demo_data as _demo
+    _DEMO_AVAILABLE = True
+except ImportError:
+    _DEMO_AVAILABLE = False
+_DEMO_ENV = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
+
 # ── Seuils de sévérité ────────────────────────────────────────────────────────
 SEUIL_CRITIQUE  = 0.70
 SEUIL_VIGILANCE = 0.40
@@ -130,9 +137,18 @@ for k, v in [("selected_bed", None), ("pending_run", None), ("run_logs", ""),
              ("run_ok", None), ("pending_hour_run", None), ("hour_score_result", None),
              ("hour_score_label", ""), ("hour_score_vector", {}), ("main_score_vector", {}),
              ("cache_version", 0), ("last_scan_hour", 0), ("last_scan_ref", ""),
-             ("last_scan_utc", None), ("show_cohort_overview", False)]:
+             ("last_scan_utc", None), ("show_cohort_overview", False),
+             ("demo_mode", _DEMO_ENV)]:
     if k not in st.session_state:
         st.session_state[k] = v
+
+# ── Mode Démo (sidebar) ───────────────────────────────────────────────────────
+with st.sidebar:
+    if _DEMO_AVAILABLE:
+        _demo_on = st.checkbox("Mode Démo", value=st.session_state.get("demo_mode", False))
+        st.session_state.demo_mode = _demo_on
+        if _demo_on:
+            st.caption("Données fictives — sans connexion SQL ni modèle")
 
 # ── Data ──────────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=30)
@@ -524,7 +540,7 @@ def render_vector_table(vec: dict, source_label: str = "", expanded: bool = True
     with st.expander(title, expanded=expanded):
         st.markdown(html, unsafe_allow_html=True)
 
-def render_detail_panel(bed, active_encounters, df_valid=None):
+def render_detail_panel(bed, active_encounters, df_valid=None, demo_mode=False):
     st.markdown("---")
 
     # Identification du patient
@@ -541,7 +557,7 @@ def render_detail_panel(bed, active_encounters, df_valid=None):
     with c_title:
         st.markdown(f"#### Analyse détaillée — Lit {bed} {enc_badge}")
     with c_btn1:
-        if st.button("Calculer", key="run_hist", width='stretch'):
+        if st.button("Calculer", key="run_hist", width='stretch', disabled=demo_mode):
             st.session_state.pending_run = bed
             st.rerun()
     with c_btn2:
@@ -568,7 +584,7 @@ def render_detail_panel(bed, active_encounters, df_valid=None):
             st.metric("Heure ciblee", target_dt.strftime("%d/%m %H:%M"))
         with col_run:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("Calculer", key=f"run_hour_{bed}", width='stretch'):
+            if st.button("Calculer", key=f"run_hour_{bed}", width='stretch', disabled=demo_mode):
                 _h = st.session_state.get(f"slider_{bed}", hour_offset)
                 st.session_state[_saved_key] = _h
                 st.session_state.pending_hour_run = (bed, _h)
@@ -600,7 +616,8 @@ def render_detail_panel(bed, active_encounters, df_valid=None):
     render_vector_table(_vec_show, source_label=_src_label, expanded=True)
 
     # Chargement des données
-    df_hist = load_patient(bed, _version=st.session_state.cache_version)
+    df_hist = (_demo.get_patient_df(bed) if demo_mode and _DEMO_AVAILABLE
+               else load_patient(bed, _version=st.session_state.cache_version))
     if df_hist.empty:
         st.info("Aucun historique disponible.")
         return
@@ -703,7 +720,7 @@ with h3:
     st.markdown(f"<div style='font-size:0.72rem;color:#94a3b8;margin-top:2px;font-style:italic'>{_label}</div>", unsafe_allow_html=True)
 with h4:
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("▶ Balayage du service"):
+    if st.button("▶ Balayage du service", disabled=st.session_state.get("demo_mode", False)):
         label_h = f" H-{global_hour}" if global_hour else ""
         with st.spinner(f"Prédiction{label_h} en cours…"):
             ok, log = run_pipeline(hour_offset=int(global_hour))
@@ -773,18 +790,22 @@ if st.session_state.pending_hour_run:
     st.session_state.cache_version += 1
     st.rerun()
 
-df_global = load_global(_version=st.session_state.cache_version)
+if st.session_state.get("demo_mode") and _DEMO_AVAILABLE:
+    df_global = _demo.get_global_df()
+    active_encounters = _demo.get_active_encounters()
+    all_service_beds = _demo.get_all_service_beds()
+else:
+    df_global = load_global(_version=st.session_state.cache_version)
+    with st.spinner("Connexion à la base de données…"):
+        active_encounters = get_active_encounters(
+            reference_utc=st.session_state.last_scan_utc,
+            _version=st.session_state.cache_version
+        )
+        all_service_beds = get_all_service_beds()
+    if not active_encounters and not all_service_beds and df_global.empty:
+        st.error("Impossible de joindre la base de données SQL. Vérifiez la connexion réseau.")
+        st.stop()
 
-with st.spinner("Connexion à la base de données…"):
-    active_encounters = get_active_encounters(
-        reference_utc=st.session_state.last_scan_utc,
-        _version=st.session_state.cache_version
-    )
-    all_service_beds = get_all_service_beds()
-
-if not active_encounters and not all_service_beds and df_global.empty:
-    st.error("Impossible de joindre la base de données SQL. Vérifiez la connexion réseau.")
-    st.stop()
 if all_service_beds:
     beds = all_service_beds
 else:
@@ -836,7 +857,10 @@ if not df_valid.empty:
         score_sd   = float(np.std(scores_arr))  if len(scores_arr) else None
 
         enc_ids_tuple = tuple(sorted(str(v) for v in active_encounters.values())) if active_encounters else ()
-        clin = get_service_clinical_summary(enc_ids_tuple, _version=st.session_state.cache_version)
+        if st.session_state.get("demo_mode") and _DEMO_AVAILABLE:
+            clin = _demo.CLINICAL_SUMMARY
+        else:
+            clin = get_service_clinical_summary(enc_ids_tuple, _version=st.session_state.cache_version)
 
         with st.container(border=True):
             st.caption(f"VUE COHORTE — {occ} PATIENTS ACTIFS")
@@ -936,10 +960,12 @@ for row_beds in rows:
                 if is_sel:
                     st.session_state.selected_bed = None
                 else:
-                    # Ouverture du panneau ET lancement du calcul 
                     st.session_state.selected_bed = str(bed)
-                    st.session_state.pending_run = str(bed) 
-                
+                    if st.session_state.get("demo_mode") and _DEMO_AVAILABLE:
+                        st.session_state.main_score_vector = _demo.get_feature_vector(str(bed))
+                    else:
+                        st.session_state.pending_run = str(bed)
+
                 st.session_state.run_logs = ""
                 st.session_state.run_ok = None
                 st.session_state.hour_score_result = None
@@ -948,4 +974,5 @@ for row_beds in rows:
 
     # Panneau sous la rangée du lit sélectionné
     if selected and selected in [str(b) for b in row_beds]:
-        render_detail_panel(selected, active_encounters, df_valid)
+        render_detail_panel(selected, active_encounters, df_valid,
+                            demo_mode=st.session_state.get("demo_mode", False))
