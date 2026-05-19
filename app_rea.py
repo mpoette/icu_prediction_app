@@ -127,6 +127,80 @@ st.markdown("""
         color: #1d4ed8;
         box-shadow: 0 1px 3px rgba(59,130,246,0.15);
     }
+
+    /* ── Responsive mobile ─────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+        /* Padding principal réduit */
+        .block-container {
+            padding-left: 0.6rem !important;
+            padding-right: 0.6rem !important;
+        }
+
+        /* Titre compact */
+        h1 { font-size: 1.25rem !important; line-height: 1.2 !important; }
+
+        /* Grille de lits : 3 par ligne (via :has sur .bed-score) */
+        div[data-testid="stHorizontalBlock"]:has(.bed-score) {
+            flex-wrap: wrap !important;
+            gap: 4px !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.bed-score) > div[data-testid="stColumn"] {
+            flex: 0 0 calc(33.33% - 3px) !important;
+            width: calc(33.33% - 3px) !important;
+            min-width: 0 !important;
+            max-width: none !important;
+        }
+
+        /* Cartes de lit adaptées */
+        .bed-score { font-size: 1.25rem !important; }
+        .badge { font-size: 0.65rem !important; padding: 2px 7px !important; }
+        div[data-testid="stButton"] button { font-size: 0.75rem !important; padding: 4px 6px !important; }
+
+        /* Toutes les autres rangées de colonnes : empilées */
+        div[data-testid="stHorizontalBlock"]:not(:has(.bed-score)) {
+            flex-wrap: wrap !important;
+        }
+        div[data-testid="stHorizontalBlock"]:not(:has(.bed-score)) > div[data-testid="stColumn"] {
+            flex: none !important;
+            width: 100% !important;
+            min-width: 100% !important;
+        }
+
+        /* KPI cards : 2 par ligne */
+        .kpi-row { flex-wrap: wrap !important; gap: 8px !important; }
+        .kpi-row > div {
+            flex: 1 1 calc(50% - 4px) !important;
+            min-width: calc(50% - 4px) !important;
+            padding: 8px !important;
+        }
+        .kpi-row .kpi-label { font-size: 0.72rem !important; }
+        .kpi-row .kpi-value { font-size: 1.4rem !important; }
+
+        /* Onglets sous-systèmes : horizontal wrappé sur mobile */
+        div[data-testid="stRadio"] > div {
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            gap: 3px !important;
+        }
+        div[data-testid="stRadio"] label {
+            font-size: 0.6rem !important;
+            padding: 4px 6px !important;
+            white-space: normal !important;
+        }
+
+        /* Feature table : scroll horizontal déjà géré, juste réduire la font */
+        table { font-size: 0.75rem !important; }
+    }
+
+    @media (max-width: 480px) {
+        /* Très petit écran : 2 lits par ligne */
+        div[data-testid="stHorizontalBlock"]:has(.bed-score) > div[data-testid="stColumn"] {
+            flex: 0 0 calc(50% - 3px) !important;
+            width: calc(50% - 3px) !important;
+        }
+        h1 { font-size: 1.05rem !important; }
+        .bed-score { font-size: 1.1rem !important; }
+    }
 </style>""", unsafe_allow_html=True)
 
 BASE = Path(__file__).resolve().parent
@@ -833,22 +907,22 @@ if not df_valid.empty:
     stab = int((last_all < SEUIL_VIGILANCE).sum())
 
     st.markdown(f"""
-    <div style="display: flex; gap: 15px; text-align: center; margin-bottom: 20px;">
+    <div class="kpi-row" style="display: flex; gap: 15px; text-align: center; margin-bottom: 20px;">
         <div style="flex: 1; padding: 12px; border-radius: 6px; background: #f8f9fa; border: 1px solid #e0e0e0; border-top: 4px solid #6c757d;">
-            <div style="font-size: 0.85rem; color: #555; text-transform: uppercase; font-weight: 600;">Lits occupés</div>
-            <div style="font-size: 1.8rem; font-weight: bold; color: #333;">{occ}</div>
+            <div class="kpi-label" style="font-size: 0.85rem; color: #555; text-transform: uppercase; font-weight: 600;">Lits occupés</div>
+            <div class="kpi-value" style="font-size: 1.8rem; font-weight: bold; color: #333;">{occ}</div>
         </div>
         <div style="flex: 1; padding: 12px; border-radius: 6px; background: #ffebee; border: 1px solid #ffcdd2; border-top: 4px solid #c62828;">
-            <div style="font-size: 0.85rem; color: #c62828; text-transform: uppercase; font-weight: 600;">Critique (≥ {SEUIL_CRITIQUE})</div>
-            <div style="font-size: 1.8rem; font-weight: bold; color: #c62828;">{crit}</div>
+            <div class="kpi-label" style="font-size: 0.85rem; color: #c62828; text-transform: uppercase; font-weight: 600;">Critique (≥ {SEUIL_CRITIQUE})</div>
+            <div class="kpi-value" style="font-size: 1.8rem; font-weight: bold; color: #c62828;">{crit}</div>
         </div>
         <div style="flex: 1; padding: 12px; border-radius: 6px; background: #fff3e0; border: 1px solid #ffe0b2; border-top: 4px solid #f57c00;">
-            <div style="font-size: 0.85rem; color: #f57c00; text-transform: uppercase; font-weight: 600;">Vigilance ({SEUIL_VIGILANCE}–{SEUIL_CRITIQUE})</div>
-            <div style="font-size: 1.8rem; font-weight: bold; color: #f57c00;">{warn}</div>
+            <div class="kpi-label" style="font-size: 0.85rem; color: #f57c00; text-transform: uppercase; font-weight: 600;">Vigilance ({SEUIL_VIGILANCE}–{SEUIL_CRITIQUE})</div>
+            <div class="kpi-value" style="font-size: 1.8rem; font-weight: bold; color: #f57c00;">{warn}</div>
         </div>
         <div style="flex: 1; padding: 12px; border-radius: 6px; background: #e8f5e9; border: 1px solid #c8e6c9; border-top: 4px solid #2e7d32;">
-            <div style="font-size: 0.85rem; color: #2e7d32; text-transform: uppercase; font-weight: 600;">Stables (&lt; {SEUIL_VIGILANCE})</div>
-            <div style="font-size: 1.8rem; font-weight: bold; color: #2e7d32;">{stab}</div>
+            <div class="kpi-label" style="font-size: 0.85rem; color: #2e7d32; text-transform: uppercase; font-weight: 600;">Stables (&lt; {SEUIL_VIGILANCE})</div>
+            <div class="kpi-value" style="font-size: 1.8rem; font-weight: bold; color: #2e7d32;">{stab}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
