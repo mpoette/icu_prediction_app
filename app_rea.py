@@ -30,7 +30,10 @@ try:
     _DEMO_AVAILABLE = True
 except ImportError:
     _DEMO_AVAILABLE = False
-_DEMO_ENV = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
+try:
+    _DEMO_ENV = bool(st.secrets.get("DEMO_MODE", False))
+except Exception:
+    _DEMO_ENV = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
 
 # ── Seuils de sévérité ────────────────────────────────────────────────────────
 SEUIL_CRITIQUE  = 0.70
